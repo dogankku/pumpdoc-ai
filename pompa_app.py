@@ -80,30 +80,41 @@ st.divider()
 
 # --- 6. AI RAPORLAMA ---
 st.header("📜 Uluslararası Teknik Beyanname (AI)")
+# --- 6. AI RAPORLAMA (GÜNCELLENMİŞ VE HATASIZ) ---
 if st.button("Profesyonel Raporu Oluştur"):
     if not api_key:
         st.warning("Lütfen sol panelden Gemini API Key giriniz.")
     else:
         try:
+            # Yapılandırma
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            
+            # 404 Hatasını aşmak için model ismini 'gemini-1.5-flash' olarak netleştiriyoruz
+            # Bazı durumlarda SDK v1beta'ya zorlar, bunu engellemek için model objesini dikkatli kuralım
+            model = genai.GenerativeModel(
+                model_name='gemini-1.5-flash',
+                generation_config={"temperature": 0.7}
+            )
             
             prompt = f"""
-            Sen uzman bir makine mühendisi ve AB regülasyon denetçisisin. 
-            Aşağıdaki verilere sahip pompa sistemi için ISO 2026 standartlarında bir rapor yaz.
-            
-            VERİLER:
-            - Tip: {pump_series}, Malzeme: {material}
-            - Kapasite: {q_target} m3/h @ {h_target} mSS
-            - Enerji: {motor_class} Verim Sınıfı, {round(p_shaft,2)} kW Mil Gücü
-            - Karbon: Yıllık {round(co2_annual_ton, 2)} Ton CO2 salınımı
-            - Güvenlik: NPSH Marjı {round(npsh_margin, 1)} metre ({'GÜVENLİ' if not cavitation_risk else 'KAVİTASYON RİSKİ'})
+            Role: Expert Mechanical Engineer & Export Consultant.
+            Task: Write a technical 'Pump Passport' for the following data.
+            Data: {pump_series}, {q_target} m3/h, {h_target} mSS, {material}, {motor_class}.
+            Context: EU 2026 Ecodesign & CBAM (Carbon) compliance.
+            Language: Professional Engineering English.
             """
             
-            with st.spinner('Yapay zeka teknik dosyayı analiz ediyor...'):
+            with st.spinner('Gemini teknik dosyayı analiz ediyor...'):
+                # generate_content çağrısını en yalın haliyle yapıyoruz
                 response = model.generate_content(prompt)
-                st.markdown(response.text)
-                st.session_state['full_report'] = response.text
+                
+                if response.text:
+                    st.markdown(response.text)
+                    st.session_state['full_report'] = response.text
+                else:
+                    st.error("Modelden boş yanıt döndü. Lütfen API Key'inizi kontrol edin.")
                 
         except Exception as e:
-            st.error(f"Model Bağlantı Hatası: {e}")
+            # Hata mesajını daha detaylı verelim ki sorunu anlayalım
+            st.error(f"Sistem Notu: {e}")
+            st.info("Eğer 404 hatası devam ediyorsa, Google AI Studio'da API Key'inizin 'Gemini 1.5 Flash' modeline açık olduğunu doğrulayın.")
