@@ -2,7 +2,10 @@ import streamlit as st
 import google.generativeai as genai
 import plotly.graph_objects as go
 import numpy as np
+import google.generativeai as genai
 
+# Bu satırı ekleyerek v1beta yerine kararlı sürüme yönlendirebiliriz
+genai.configure(api_key="API_KEY_BURAYA", transport='rest')
 # --- 1. SAYFA KONFİGÜRASYONU ---
 st.set_page_config(page_title="PumpDoc-AI Pro 2026", layout="wide", page_icon="⚙️")
 
