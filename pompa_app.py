@@ -1,91 +1,64 @@
 import streamlit as st
 import google.generativeai as genai
+import plotly.graph_objects as go
+import numpy as np
 
-# --- PROFESYONEL AYARLAR ---
-st.set_page_config(page_title="PumpDoc-AI Pro 2026", layout="wide")
-st.title("⚙️ PumpDoc-AI Pro: Mühendislik Analiz Portalı")
+# --- 1. SAYFA KONFİGÜRASYONU ---
+st.set_page_config(page_title="PumpDoc-AI Pro 2026", layout="wide", page_icon="⚙️")
 
-# --- SIDEBAR: TEKNİK GİRDİLER ---
+# --- CUSTOM CSS (Kurumsal Görünüm) ---
+st.markdown("""
+    <style>
+    .stApp { background-color: #f8f9fa; }
+    .metric-card { background-color: white; padding: 20px; border-radius: 10px; box-shadow: 2px 2px 10px rgba(0,0,0,0.1); }
+    </style>
+    """, unsafe_allow_stdio=True)
+
+st.title("⚙️ PumpDoc-AI Pro: Mühendislik & İhracat Analiz Portalı")
+st.caption("2026 AB Makine Yönetmeliği ve SKDM (CBAM) Uyumluluk Sistemi")
+
+# --- 2. SOL PANEL (GİRDİLER) ---
 with st.sidebar:
-    st.header("📋 Teknik Spesifikasyonlar")
+    st.header("🔑 Güvenli Erişim")
     api_key = st.text_input("Gemini API Key", type="password")
     
-    st.subheader("1. Hidrolik Veriler")
-    q = st.number_input("Debi (Q - m3/h)", value=50.0)
-    h = st.number_input("Basma Yüksekliği (H - mSS)", value=100.0)
+    st.header("📋 Teknik Veriler")
+    pump_type = st.selectbox("Pompa Serisi", ["H-Series Kademeli", "V-Series Dikey", "P-Series Proses"])
+    q_target = st.number_input("Tasarım Debisi (Q - m3/h)", value=60.0)
+    h_target = st.number_input("Basma Yüksekliği (H - mSS)", value=120.0)
     
-    st.subheader("2. Emme Koşulları (NPSH)")
-    npsh_available = st.number_input("Mevcut NPSH (NPSHa - m)", value=5.0)
-    npsh_required = st.number_input("Gerekli NPSH (NPSHr - m)", value=3.5)
+    st.subheader("🛡️ Emme Koşulları")
+    npsha = st.number_input("Mevcut NPSH (NPSHa - m)", value=5.5)
+    npshr = st.number_input("Gerekli NPSH (NPSHr - m)", value=3.2)
     
-    st.subheader("3. Motor & Enerji")
+    st.subheader("⚡ Enerji & Malzeme")
     motor_class = st.selectbox("Motor Verim Sınıfı", ["IE2", "IE3", "IE4", "IE5"])
-    material = st.selectbox("Malzeme", ["AISI 316", "AISI 304", "Dökme Demir"])
+    material = st.selectbox("Malzeme", ["AISI 316L", "AISI 304", "Duplex", "GG25 Döküm"])
+    op_hours = st.slider("Yıllık Çalışma Saati", 1000, 8760, 4500)
 
-# --- MÜHENDİSLİK HESAP MOTORU ---
-# Hidrolik ve Mil Gücü Hesabı
-rho = 1000 # kg/m3 (Su)
+# --- 3. MÜHENDİSLİK HESAP MOTORU ---
+rho = 1000 # kg/m3
 g = 9.81
-eta_pump = 0.72 # Varsayılan pompa verimi
-p_hyd = (q * h * rho * g) / (3.6 * 10**6)
+eta_pump = 0.74 # %74 Verim varsayımı
+p_hyd = (q_target * h_target * rho * g) / (3.6 * 10**6)
 p_shaft = p_hyd / eta_pump
-suggested_motor = round(p_shaft * 1.15, 1) # %15 emniyet faktörü
+suggested_motor = round(p_shaft * 1.15, 1)
 
-# Kavitasyon Kontrolü
-cavitation_risk = npsh_available < (npsh_required + 0.5)
-
-# Enerji Tasarrufu Analizi (IE2'ye göre yıllık kazanç tahmini)
+# Karbon ve Enerji Analizi
 efficiency_map = {"IE2": 0.88, "IE3": 0.91, "IE4": 0.94, "IE5": 0.96}
-annual_op_hours = 4000
-energy_price = 0.15 # $/kWh
-saving = (p_shaft / efficiency_map["IE2"] - p_shaft / efficiency_map[motor_class]) * annual_op_hours * energy_price
+annual_energy_kwh = (p_shaft / efficiency_map[motor_class]) * op_hours
+co2_annual = (annual_energy_kwh * 0.42) / 1000 # Ton CO2/Yıl
 
-# --- ANA EKRAN: TEKNİK ANALİZ ---
-col1, col2, col3 = st.columns(3)
+# Kavitasyon Riski
+cavitation_status = "GÜVENLİ" if npsha > (npshr + 0.5) else "RİSKLİ"
 
-with col1:
-    st.metric("Mil Gücü ($P_{shaft}$)", f"{round(p_shaft, 2)} kW")
-    if cavitation_risk:
-        st.error("⚠️ KAVİTASYON RİSKİ! NPSHa değerini artırın.")
-    else:
-        st.success("✅ NPSH Dengesi Uygun")
+# --- 4. GÖRSEL ANALİZ (Plotly) ---
+st.header("📈 Hidrolik Performans Analizi")
+q_curve = np.linspace(0, q_target * 1.4, 50)
+h_curve = h_target * 1.2 * (1 - (q_curve / (q_target * 1.8))**2)
 
-with col2:
-    st.metric("Yıllık Enerji Tasarrufu", f"${round(saving, 0)}")
-    st.caption(f"IE2 sınıfına göre {motor_class} avantajı.")
-
-with col3:
-    carbon_val = (p_shaft * annual_op_hours * 0.45) / 1000 # Operasyonel Karbon (ton/yıl)
-    st.metric("Yıllık CO2 (Operasyonel)", f"{round(carbon_val, 2)} Ton")
-
-st.divider()
-
-# --- GEMINI AI: TEKNİK DOSYA YAZIMI ---
-if st.button("Profesyonel Mühendislik Raporu Oluştur"):
-    if api_key:
-        try:
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            
-            prompt = f"""
-            Sen kıdemli bir mekanik tasarım mühendisisin. Aşağıdaki veriler için teknik bir beyan hazırla:
-            - Pompa: {q} m3/h, {h} mSS performansında.
-            - NPSH Durumu: NPSHa={npsh_available}m, NPSHr={npsh_required}m.
-            - Motor: {motor_class} verimlilik sınıfı.
-            - Karbon: Yıllık {carbon_val} ton CO2 salınımı.
-            
-            Görev:
-            1. Ürünün kavitasyon güvenliğini teknik dille analiz et.
-            2. {motor_class} motorun işletme maliyeti üzerindeki etkisini vurgula.
-            3. AB 2026 Eko-Tasarım (Ecodesign) yönetmeliğine uygunluğunu teyit eden profesyonel bir sonuç paragrafı yaz.
-            """
-            
-            with st.spinner('Mühendislik raporu oluşturuluyor...'):
-                response = model.generate_content(prompt)
-                st.markdown(response.text)
-                st.session_state['pro_report'] = response.text
-        except Exception as e:
-            st.error(f"Hata: {e}")
-
-if 'pro_report' in st.session_state:
-    st.download_button("📄 Teknik Dosyayı İndir", st.session_state['pro_report'], file_name="Tech_Analysis.txt")
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=q_curve, y=h_curve, name='Pompa Eğrisi (H-Q)', line=dict(color='#1f77b4', width=4)))
+fig.add_trace(go.Scatter(x=[q_target], y=[h_target], name='Çalışma Noktası', mode='markers', marker=dict(color='red', size=15, symbol='cross')))
+fig.update_layout(height=400, margin=dict(l=20, r=20, t=40, b=20), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+st.plotly_chart(fig, use_container_view=True)
