@@ -2,18 +2,15 @@ import streamlit as st
 import google.generativeai as genai
 import plotly.graph_objects as go
 import numpy as np
-import google.generativeai as genai
 
-# Bu satırı ekleyerek v1beta yerine kararlı sürüme yönlendirebiliriz
-genai.configure(api_key="API_KEY_BURAYA", transport='rest')
 # --- 1. SAYFA KONFİGÜRASYONU ---
 st.set_page_config(page_title="PumpDoc-AI Pro 2026", layout="wide", page_icon="⚙️")
 
-# --- CUSTOM CSS (Kurumsal Görünüm) ---
+# --- KURUMSAL TASARIM ---
 st.markdown("""
     <style>
-    .stApp { background-color: #f8f9fa; }
-    .metric-card { background-color: white; padding: 20px; border-radius: 10px; box-shadow: 2px 2px 10px rgba(0,0,0,0.1); }
+    .main { background-color: #f8f9fa; }
+    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     </style>
     """, unsafe_allow_stdio=True)
 
@@ -23,45 +20,70 @@ st.caption("2026 AB Makine Yönetmeliği ve SKDM (CBAM) Uyumluluk Sistemi")
 # --- 2. SOL PANEL (GİRDİLER) ---
 with st.sidebar:
     st.header("🔑 Güvenli Erişim")
-    api_key = st.text_input("AIzaSyA3RHncdoIxLZ8yFoTLxf3HoG9hT3Mimkw", type="password")
+    api_key = st.text_input("Gemini API Key", type="password", help="Google AI Studio'dan aldığınız anahtar.")
     
-    st.header("📋 Teknik Veriler")
-    pump_type = st.selectbox("Pompa Serisi", ["H-Series Kademeli", "V-Series Dikey", "P-Series Proses"])
+    st.header("📋 Teknik Spesifikasyonlar")
+    pump_series = st.selectbox("Pompa Serisi", ["H-Series (Kademeli)", "V-Series (Dikey)", "P-Series (Proses)"])
     q_target = st.number_input("Tasarım Debisi (Q - m3/h)", value=60.0)
     h_target = st.number_input("Basma Yüksekliği (H - mSS)", value=120.0)
     
-    st.subheader("🛡️ Emme Koşulları")
+    st.subheader("🛡️ Emme Koşulları (NPSH)")
     npsha = st.number_input("Mevcut NPSH (NPSHa - m)", value=5.5)
     npshr = st.number_input("Gerekli NPSH (NPSHr - m)", value=3.2)
     
     st.subheader("⚡ Enerji & Malzeme")
     motor_class = st.selectbox("Motor Verim Sınıfı", ["IE2", "IE3", "IE4", "IE5"])
-    material = st.selectbox("Malzeme", ["AISI 316L", "AISI 304", "Duplex", "GG25 Döküm"])
+    material = st.selectbox("Ana Malzeme", ["AISI 316L Paslanmaz", "AISI 304 Paslanmaz", "Duplex Çelik", "GG25 Döküm"])
     op_hours = st.slider("Yıllık Çalışma Saati", 1000, 8760, 4500)
 
 # --- 3. MÜHENDİSLİK HESAP MOTORU ---
-rho = 1000 # kg/m3
+# Hidrolik Hesaplamalar
+rho = 1000 # kg/m3 (Su)
 g = 9.81
-eta_pump = 0.74 # %74 Verim varsayımı
+eta_pump = 0.74 # %74 Pompa Verimi
 p_hyd = (q_target * h_target * rho * g) / (3.6 * 10**6)
 p_shaft = p_hyd / eta_pump
-suggested_motor = round(p_shaft * 1.15, 1)
+suggested_motor = round(p_shaft * 1.15, 1) # %15 Emniyet payı
 
-# Karbon ve Enerji Analizi
+# Enerji ve ROI Analizi (IE2'ye göre kıyaslama)
 efficiency_map = {"IE2": 0.88, "IE3": 0.91, "IE4": 0.94, "IE5": 0.96}
 annual_energy_kwh = (p_shaft / efficiency_map[motor_class]) * op_hours
-co2_annual = (annual_energy_kwh * 0.42) / 1000 # Ton CO2/Yıl
+# Karbon Ayak İzi (2026 Güncel Emisyon Faktörü)
+co2_annual_ton = (annual_energy_kwh * 0.42) / 1000 
 
-# Kavitasyon Riski
-cavitation_status = "GÜVENLİ" if npsha > (npshr + 0.5) else "RİSKLİ"
+# Kavitasyon Riski Denetimi
+npsh_margin = npsha - npshr
+cavitation_risk = npsh_margin < 0.5
 
-# --- 4. GÖRSEL ANALİZ (Plotly) ---
-st.header("📈 Hidrolik Performans Analizi")
-q_curve = np.linspace(0, q_target * 1.4, 50)
-h_curve = h_target * 1.2 * (1 - (q_curve / (q_target * 1.8))**2)
+# --- 4. GÖRSEL ANALİZ (H-Q Grafiği) ---
+st.header("📈 Hidrolik Performans Eğrisi")
+q_curve = np.linspace(0, q_target * 1.5, 50)
+h_curve = h_target * 1.25 * (1 - (q_curve / (q_target * 2.0))**2)
 
 fig = go.Figure()
-fig.add_trace(go.Scatter(x=q_curve, y=h_curve, name='Pompa Eğrisi (H-Q)', line=dict(color='#1f77b4', width=4)))
-fig.add_trace(go.Scatter(x=[q_target], y=[h_target], name='Çalışma Noktası', mode='markers', marker=dict(color='red', size=15, symbol='cross')))
-fig.update_layout(height=400, margin=dict(l=20, r=20, t=40, b=20), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+fig.add_trace(go.Scatter(x=q_curve, y=h_curve, name='H-Q Eğrisi', line=dict(color='#007bff', width=3)))
+fig.add_trace(go.Scatter(x=[q_target], y=[h_target], name='Çalışma Noktası', mode='markers', marker=dict(color='red', size=15, symbol='diamond')))
+fig.update_layout(height=400, template="plotly_white", margin=dict(l=20, r=20, t=40, b=20))
 st.plotly_chart(fig, use_container_view=True)
+
+[Image of a centrifugal pump performance curve showing H-Q and efficiency]
+
+# --- 5. ANALİZ ÖZETİ (Dashboard) ---
+c1, c2, c3, c4 = st.columns(4)
+with c1:
+    st.metric("Mil Gücü (kW)", f"{round(p_shaft, 2)}")
+with c2:
+    st.metric("Motor Gücü (kW)", f"{suggested_motor}")
+with c3:
+    status_color = "normal" if not cavitation_risk else "inverse"
+    st.metric("NPSH Marjı (m)", f"{round(npsh_margin, 1)}", delta="GÜVENLİ" if not cavitation_risk else "RİSKLİ", delta_color=status_color)
+with c4:
+    st.metric("Yıllık Karbon (Ton)", f"{round(co2_annual_ton, 1)}")
+
+st.divider()
+
+# --- 6. AI RAPORLAMA (HATA DÜZELTİLMİŞ GEMINI BAĞLANTISI) ---
+st.header("📜 Uluslararası Teknik Beyanname (AI)")
+if st.button("Profesyonel Raporu Oluştur"):
+    if not api_key:
+        st.
