@@ -86,37 +86,57 @@ if st.button("Profesyonel Raporu Oluştur"):
         st.warning("Lütfen sol panelden Gemini API Key giriniz.")
     else:
         try:
-            # 1. Adım: API Yapılandırmasını 'REST' üzerinden ve en güncel haliyle yapalım
+            # 1. API Yapılandırması (REST protokolüne zorlayarak bağlantıyı stabilize ediyoruz)
             genai.configure(api_key=api_key, transport='rest')
             
-            # 2. Adım: Model ismini tam ve kesin haliyle çağıralım
-            # Bazı bölgelerde 'models/gemini-1.5-flash' tam yolu gerekebilir
-            model = genai.GenerativeModel(model_name='gemini-1.5-flash')
+            # 2. TEŞHİS: Mevcut modelleri listele ve uygun olanı bul
+            available_models = []
+            for m in genai.list_models():
+                if 'generateContent' in m.supported_generation_methods:
+                    available_models.append(m.name)
+            
+            # Eğer model listesi boşsa anahtarda sorun vardır
+            if not available_models:
+                st.error("API Anahtarınız için kullanılabilir model bulunamadı.")
+                st.stop()
+            
+            # 3. STRATEJİK SEÇİM: Önce 1.5 Flash'ı, yoksa Pro'yu, o da yoksa ilk bulduğunu seç
+            # 404 hatasını önlemek için tam model yolunu (models/...) kullanıyoruz
+            selected_model_name = ""
+            preferred_models = [
+                'models/gemini-1.5-flash', 
+                'models/gemini-1.5-flash-latest', 
+                'models/gemini-pro'
+            ]
+            
+            for pref in preferred_models:
+                if pref in available_models:
+                    selected_model_name = pref
+                    break
+            
+            if not selected_model_name:
+                selected_model_name = available_models[0] # Hiçbiri yoksa ilki seç
+                
+            st.info(f"Sistem şu modeli kullanıyor: {selected_model_name}")
+            
+            # 4. MODELİ ÇALIŞTIR
+            model = genai.GenerativeModel(model_name=selected_model_name)
             
             prompt = f"""
-            Sen uzman bir pompa mühendisisin. Aşağıdaki verilerle profesyonel bir teknik rapor hazırla.
-            Model: {pump_series}, Debi: {q_target} m3/h, Basma: {h_target} mSS, Malzeme: {material}.
-            Lütfen 2026 AB SKDM (CBAM) kurallarına teknik bir atıf yap.
+            Role: Expert Mechanical Engineer. 
+            Write a technical report for a {pump_series} pump. 
+            Data: {q_target} m3/h, {h_target} mSS, Material: {material}. 
+            Focus: EU 2026 CBAM Carbon Compliance.
             """
             
-            with st.spinner('Mühendislik raporu oluşturuluyor...'):
-                # 3. Adım: Doğrudan üretimi yapalım
+            with st.spinner('Analiz yapılıyor...'):
                 response = model.generate_content(prompt)
-                
-                # Yanıtın içinde metin olup olmadığını güvenli kontrol edelim
                 if response and response.text:
                     st.session_state['full_report'] = response.text
                     st.markdown(response.text)
                 else:
-                    st.error("Model yanıt verdi ancak içerik boş. API Key limitlerini kontrol edin.")
-                
+                    st.error("Modelden yanıt alınamadı.")
+                    
         except Exception as e:
-            # Hata devam ederse alternatif modeli (Gemini Pro) deneyen bir 'fail-safe' mekanizması
-            st.error(f"Hata: {e}")
-            st.info("Alternatif model deneniyor: 'gemini-pro'...")
-            try:
-                model_alt = genai.GenerativeModel('gemini-pro')
-                response_alt = model_alt.generate_content(prompt)
-                st.markdown(response_alt.text)
-            except:
-                st.error("Maalesef hiçbir modele ulaşılamadı. Lütfen Google AI Studio'dan yeni bir API Key almayı deneyin.")
+            st.error(f"Kritik Hata: {e}")
+            st.info("Lütfen API anahtarınızın 'Generative Language API' için etkinleştirildiğinden emin olun.")
