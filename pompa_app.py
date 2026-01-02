@@ -20,7 +20,7 @@ st.caption("2026 AB Makine Yönetmeliği ve SKDM (CBAM) Uyumluluk Sistemi")
 # --- 2. SOL PANEL (GİRDİLER) ---
 with st.sidebar:
     st.header("🔑 Güvenli Erişim")
-    api_key = st.text_input("Gemini API Key", type="password")
+    api_key = st.text_input("AIzaSyA3RHncdoIxLZ8yFoTLxf3HoG9hT3Mimkw", type="password")
     
     st.header("📋 Teknik Veriler")
     pump_type = st.selectbox("Pompa Serisi", ["H-Series Kademeli", "V-Series Dikey", "P-Series Proses"])
