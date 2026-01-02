@@ -86,35 +86,37 @@ if st.button("Profesyonel Raporu Oluştur"):
         st.warning("Lütfen sol panelden Gemini API Key giriniz.")
     else:
         try:
-            # Yapılandırma
-            genai.configure(api_key=api_key)
+            # 1. Adım: API Yapılandırmasını 'REST' üzerinden ve en güncel haliyle yapalım
+            genai.configure(api_key=api_key, transport='rest')
             
-            # 404 Hatasını aşmak için model ismini 'gemini-1.5-flash' olarak netleştiriyoruz
-            # Bazı durumlarda SDK v1beta'ya zorlar, bunu engellemek için model objesini dikkatli kuralım
-            model = genai.GenerativeModel(
-                model_name='gemini-1.5-flash',
-                generation_config={"temperature": 0.7}
-            )
+            # 2. Adım: Model ismini tam ve kesin haliyle çağıralım
+            # Bazı bölgelerde 'models/gemini-1.5-flash' tam yolu gerekebilir
+            model = genai.GenerativeModel(model_name='gemini-1.5-flash')
             
             prompt = f"""
-            Role: Expert Mechanical Engineer & Export Consultant.
-            Task: Write a technical 'Pump Passport' for the following data.
-            Data: {pump_series}, {q_target} m3/h, {h_target} mSS, {material}, {motor_class}.
-            Context: EU 2026 Ecodesign & CBAM (Carbon) compliance.
-            Language: Professional Engineering English.
+            Sen uzman bir pompa mühendisisin. Aşağıdaki verilerle profesyonel bir teknik rapor hazırla.
+            Model: {pump_series}, Debi: {q_target} m3/h, Basma: {h_target} mSS, Malzeme: {material}.
+            Lütfen 2026 AB SKDM (CBAM) kurallarına teknik bir atıf yap.
             """
             
-            with st.spinner('Gemini teknik dosyayı analiz ediyor...'):
-                # generate_content çağrısını en yalın haliyle yapıyoruz
+            with st.spinner('Mühendislik raporu oluşturuluyor...'):
+                # 3. Adım: Doğrudan üretimi yapalım
                 response = model.generate_content(prompt)
                 
-                if response.text:
-                    st.markdown(response.text)
+                # Yanıtın içinde metin olup olmadığını güvenli kontrol edelim
+                if response and response.text:
                     st.session_state['full_report'] = response.text
+                    st.markdown(response.text)
                 else:
-                    st.error("Modelden boş yanıt döndü. Lütfen API Key'inizi kontrol edin.")
+                    st.error("Model yanıt verdi ancak içerik boş. API Key limitlerini kontrol edin.")
                 
         except Exception as e:
-            # Hata mesajını daha detaylı verelim ki sorunu anlayalım
-            st.error(f"Sistem Notu: {e}")
-            st.info("Eğer 404 hatası devam ediyorsa, Google AI Studio'da API Key'inizin 'Gemini 1.5 Flash' modeline açık olduğunu doğrulayın.")
+            # Hata devam ederse alternatif modeli (Gemini Pro) deneyen bir 'fail-safe' mekanizması
+            st.error(f"Hata: {e}")
+            st.info("Alternatif model deneniyor: 'gemini-pro'...")
+            try:
+                model_alt = genai.GenerativeModel('gemini-pro')
+                response_alt = model_alt.generate_content(prompt)
+                st.markdown(response_alt.text)
+            except:
+                st.error("Maalesef hiçbir modele ulaşılamadı. Lütfen Google AI Studio'dan yeni bir API Key almayı deneyin.")
